@@ -43,7 +43,7 @@ def cleanup_last_seen():
 
 def get_faces():
     global persons
-    url = f"{API_URL}/api/persons/faces"
+    url = f"{API_URL}/persons/faces"
     headers = {
         "Content-Type": "application/json"
     }
@@ -77,9 +77,8 @@ def distance_to_confidence(distance):
     return round(confidence * 100, 2)
 
 
-def capture_camera(camera_ip):
-    # video_capture = cv2.VideoCapture(f"http://{camera_ip}:8080/video")
-    video_capture = cv2.VideoCapture(f"rtsp://{camera_ip}:8080/h264.sdp")
+def capture_camera(camera_url):
+    video_capture = cv2.VideoCapture(camera_url)
 
     frame_count = 0
 
@@ -131,7 +130,7 @@ def capture_camera(camera_ip):
                         min_distance = np.min(distances)
                         data = {
                             "personId": 0,
-                            "camera_ip": camera_ip,
+                            "camera_url": camera_url,
                             "confidenceFactor": 0
                         }
 
@@ -142,9 +141,9 @@ def capture_camera(camera_ip):
                             person_id = persons[best_match_index]["personId"]
                             data["personId"] = person_id
                             data["confidenceFactor"] = round(confidence, 2)
-                            key = (camera_ip, person_id)
+                            key = (camera_url, person_id)
                         else:
-                            key = (camera_ip, "unknown")
+                            key = (camera_url, "unknown")
 
                         # Send report only if cooldown passed
                         if now - last_seen[key] >= COOLDOWN_SECONDS:
@@ -152,10 +151,10 @@ def capture_camera(camera_ip):
                             threading.Thread(target=add_report, args=(data,), daemon=True).start()
 
 def start_all_cameras():
-    camera_ips = ["192.168.0.134"]
+    camera_urls = ["rtsp://192.168.0.134:8080/h264.sdp", "rtsp://admin:@192.168.0.197:554/live/ch00_0"]
 
-    for camera_ip in camera_ips:
-        threading.Thread(target=capture_camera, args=(camera_ip,), daemon=True).start()
+    for camera_url in camera_urls:
+        threading.Thread(target=capture_camera, args=(camera_url,), daemon=True).start()
 
 if __name__ == '__main__':
     get_faces()

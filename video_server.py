@@ -1,5 +1,5 @@
 import cv2
-from flask import Flask, Response
+from flask import Flask, Response, request
 from cvzone.FaceDetectionModule import FaceDetector
 import asyncio
 import threading
@@ -53,13 +53,15 @@ def get_faces():
 
     threading.Timer(900, get_faces).start()
 
-def generate_stream(camera_ip, detection):
+def generate_stream(camera_url, detection):
     get_faces()
     
     COOLDOWN_SECONDS = 10
     last_seen = time.time() - COOLDOWN_SECONDS
     
-    cap = cv2.VideoCapture(f"http://{camera_ip}:8080/video")
+    # cap = cv2.VideoCapture(f"http://{camera_ip}:8080/video")
+    # cap = cv2.VideoCapture("rtsp://admin:@192.168.0.197:554/live/ch00_0")
+    cap = cv2.VideoCapture(camera_url)
     detector = FaceDetector(minDetectionCon=0.8)
 
     while True:
@@ -78,7 +80,7 @@ def generate_stream(camera_ip, detection):
                 min_distance = np.min(distances)
                 face_data = {
                     "event": "face_detected",
-                    "camera_ip": camera_ip,
+                    "camera_url": camera_url,
                     "face": encodings[0].tolist(),
                     "exists": False,
                 }
@@ -93,14 +95,16 @@ def generate_stream(camera_ip, detection):
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-@app.route('/<camera_ip>/detection')
-def detection(camera_ip):
-    return Response(generate_stream(camera_ip, True),
+@app.route('/detection')
+def detection():
+    camera_url = request.args.get("camera_url")
+    return Response(generate_stream(camera_url, True),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-@app.route('/<camera_ip>/live')
-def live(camera_ip):
-    return Response(generate_stream(camera_ip, False),
+@app.route('/live')
+def live():
+    camera_url = request.args.get("camera_url")
+    return Response(generate_stream(camera_url, False),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
