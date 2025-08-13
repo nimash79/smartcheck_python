@@ -54,46 +54,59 @@ def get_faces():
 
 def generate_stream(camera_url, detection):
     persons = get_faces()
-    
     COOLDOWN_SECONDS = 10
     last_seen = time.time() - COOLDOWN_SECONDS
-    
-    # cap = cv2.VideoCapture(f"http://{camera_ip}:8080/video")
-    # cap = cv2.VideoCapture("rtsp://admin:@192.168.0.197:554/live/ch00_0")
-    cap = cv2.VideoCapture(camera_url)
-    detector = FaceDetector(minDetectionCon=0.8)
+    # detector = FaceDetector(minDetectionCon=0.8)
 
     while True:
-        success, frame = cap.read()
-        if not success:
-            break
+        cap = cv2.VideoCapture(camera_url)
+        if not cap.isOpened():
+            print(f"⚠️ Failed to connect to camera {camera_url}. Retrying in 3s...")
+            time.sleep(3)
+            continue
+        print(f"✅ Connected to camera {camera_url}")
 
-        frame = cv2.resize(frame, (640, 480))
-        now = time.time()
-        if detection and now - last_seen >= COOLDOWN_SECONDS:
-            last_seen = now
-            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            encodings = face_recognition.face_encodings(img_rgb)
-            if encodings:
-                face_data = {
-                    "event": "face_detected",
-                    "camera_url": camera_url,
-                    "face": encodings[0].tolist(),
-                    "exists": False,
-                }
-                if len(persons) > 1:
-                    distances = face_recognition.face_distance([person["face"] for person in persons], encodings[0])
-                    min_distance = np.min(distances)
-                    if min_distance <= 0.5:
-                        face_data["exists"] = True
-                notify_node_server(face_data)
-        # else:
-        #     frame, _ = detector.findFaces(frame, draw=True)
+        while True:
+            success, frame = cap.read()
+            if not success:
+                print(f"⚠️ Lost connection to camera {camera_url}. Reconnecting...")
+                cap.release()
+                time.sleep(2)
+                break
 
-        _, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+            frame = cv2.resize(frame, (640, 480))
+            now = time.time()
+
+            if detection and now - last_seen >= COOLDOWN_SECONDS:
+                last_seen = now
+                img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                encodings = face_recognition.face_encodings(img_rgb)
+
+                if encodings:
+                    face_data = {
+                        "event": "face_detected",
+                        "camera_url": camera_url,
+                        "face": encodings[0].tolist(),
+                        "exists": False,
+                    }
+
+                    if len(persons) > 1:
+                        distances = face_recognition.face_distance(
+                            [person["face"] for person in persons], encodings[0]
+                        )
+                        min_distance = np.min(distances)
+                        if min_distance <= 0.5:
+                            face_data["exists"] = True
+
+                    notify_node_server(face_data)
+            # else:
+            #   frame, _ = detector.findFaces(frame, draw=True)
+
+            _, buffer = cv2.imencode('.jpg', frame)
+            frame_bytes = buffer.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
 
 @app.route('/detection')
 def detection():

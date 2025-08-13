@@ -114,53 +114,61 @@ def distance_to_confidence(distance):
 
 
 def capture_camera(camera_url):
-    video_capture = cv2.VideoCapture(camera_url)
-
     frame_count = 0
 
     while True:
-        success, frame = video_capture.read()
-        if not success:
+        video_capture = cv2.VideoCapture(camera_url)
+        if not video_capture.isOpened():
+            print(f"⚠️ Failed to connect to camera {camera_url}. Retrying in 3s...")
+            time.sleep(3)
             continue
-        
-        frame_count += 1
-        if frame_count % 5 != 0:
-            continue
-        frame = cv2.resize(frame, (640, 480))
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        print(f"✅ Connected to camera {camera_url}")
 
-        encodings = face_recognition.face_encodings(img_rgb)
+        while True:
+            success, frame = video_capture.read()
+            if not success:
+                print(f"⚠️ Lost connection to camera {camera_url}. Reconnecting...")
+                video_capture.release()
+                time.sleep(2)
+                break  # break inner loop to recreate VideoCapture
 
+            frame_count += 1
+            if frame_count % 5 != 0:
+                continue
 
-        for encoding in encodings:
-            # matches = face_recognition.compare_faces([person["face"] for person in persons], encoding, tolerance=0.6)
-            # if True in matches:
-            #     index = matches.index(True)
-            #     name = persons[index]["name"]
-            #     print(f"I found {name}")
-            distances = face_recognition.face_distance([person["face"] for person in persons], encoding)
-            min_distance = np.min(distances)
-            data = {
-                "personId": 0,
-                "camera_url": camera_url,
-                "confidenceFactor": 0
-            }
+            frame = cv2.resize(frame, (640, 480))
+            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            now = time.time()
-            if min_distance <= 0.5:
-                best_match_index = np.argmin(distances)
-                confidence = distance_to_confidence(min_distance)
-                person_id = persons[best_match_index]["personId"]
-                data["personId"] = person_id
-                data["confidenceFactor"] = round(confidence, 2)
-                key = (camera_url, person_id)
-            else:
-                key = (camera_url, "unknown")
+            encodings = face_recognition.face_encodings(img_rgb)
 
-            # Send report only if cooldown passed
-            if now - last_seen[key] >= COOLDOWN_SECONDS:
-                last_seen[key] = now
-                threading.Thread(target=add_report, args=(data,), daemon=True).start()
+            for encoding in encodings:
+                distances = face_recognition.face_distance(
+                    [person["face"] for person in persons], encoding
+                )
+                if len(distances) == 0:
+                    continue
+                min_distance = np.min(distances)
+                data = {
+                    "personId": 0,
+                    "camera_url": camera_url,
+                    "confidenceFactor": 0
+                }
+
+                now = time.time()
+                if min_distance <= 0.5:
+                    best_match_index = np.argmin(distances)
+                    confidence = distance_to_confidence(min_distance)
+                    person_id = persons[best_match_index]["personId"]
+                    data["personId"] = person_id
+                    data["confidenceFactor"] = round(confidence, 2)
+                    key = (camera_url, person_id)
+                else:
+                    key = (camera_url, "unknown")
+
+                if now - last_seen[key] >= COOLDOWN_SECONDS:
+                    last_seen[key] = now
+                    threading.Thread(target=add_report, args=(data,), daemon=True).start()
+
 
 def start_all_cameras():
     camera_urls = get_camera_urls()
