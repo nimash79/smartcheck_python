@@ -76,6 +76,26 @@ def get_faces():
     except Exception as e:
         print("⚠️ Error while fetching faces:", e)
 
+def get_camera_urls():
+    url = f"{API_URL}/cameras"
+    headers = {
+        "Content-Type": "application/json"
+    }
+    camera_urls = []
+
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            cameras = response.json()["data"]["cameras"]
+            camera_urls = [camera["ip"] for camera in cameras]
+            print("✅ Camera Urls updated:", len(camera_urls))
+        else:
+            print("❌ Failed to fetch camera urls. Status:", response.status_code)
+    except Exception as e:
+        print("⚠️ Error while fetching camera urls:", e)
+
+    return camera_urls
+
 def add_report(data):
     url = f"{API_URL}/reports/add"
     headers = {
@@ -143,7 +163,7 @@ def capture_camera(camera_url):
                 threading.Thread(target=add_report, args=(data,), daemon=True).start()
 
 def start_all_cameras():
-    camera_urls = ["rtsp://admin:@192.168.0.197:554/live/ch00_0", "http://192.168.0.133:8080/video"]
+    camera_urls = get_camera_urls()
 
     for camera_url in camera_urls:
         threading.Thread(target=capture_camera, args=(camera_url,), daemon=True).start()
