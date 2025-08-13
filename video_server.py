@@ -33,9 +33,7 @@ def notify_node_server(face_data):
 
     threading.Thread(target=run_async_loop, args=(send_face(),)).start()
 
-persons = []
 def get_faces():
-    global persons
     url = f"{API_URL}/persons/faces"
     headers = {
         "Content-Type": "application/json"
@@ -46,15 +44,16 @@ def get_faces():
         if response.status_code == 200:
             persons = response.json()["data"]["persons"]
             print("✅ Faces updated:", len(persons))
+            return persons
         else:
             print("❌ Failed to fetch faces. Status:", response.status_code)
+            return None
     except Exception as e:
         print("⚠️ Error while fetching faces:", e)
-
-    threading.Timer(3600, get_faces).start()
+        return None
 
 def generate_stream(camera_url, detection):
-    get_faces()
+    persons = get_faces()
     
     COOLDOWN_SECONDS = 10
     last_seen = time.time() - COOLDOWN_SECONDS
@@ -109,4 +108,5 @@ def live():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
+    
     app.run(host='0.0.0.0', port=PORT)
