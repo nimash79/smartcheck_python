@@ -51,7 +51,7 @@ def get_faces():
     except Exception as e:
         print("⚠️ Error while fetching faces:", e)
 
-    threading.Timer(900, get_faces).start()
+    threading.Timer(3600, get_faces).start()
 
 def generate_stream(camera_url, detection):
     get_faces()
@@ -76,16 +76,17 @@ def generate_stream(camera_url, detection):
             img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             encodings = face_recognition.face_encodings(img_rgb)
             if encodings:
-                distances = face_recognition.face_distance([person["face"] for person in persons], encodings[0])
-                min_distance = np.min(distances)
                 face_data = {
                     "event": "face_detected",
                     "camera_url": camera_url,
                     "face": encodings[0].tolist(),
                     "exists": False,
                 }
-                if min_distance <= 0.5:
-                    face_data["exists"] = True
+                if len(persons) > 1:
+                    distances = face_recognition.face_distance([person["face"] for person in persons], encodings[0])
+                    min_distance = np.min(distances)
+                    if min_distance <= 0.5:
+                        face_data["exists"] = True
                 notify_node_server(face_data)
         # else:
         #     frame, _ = detector.findFaces(frame, draw=True)
