@@ -3,7 +3,6 @@ import threading
 import time
 from collections import defaultdict
 import time
-import mediapipe as mp
 import face_recognition
 import numpy as np
 import requests
@@ -15,8 +14,6 @@ load_dotenv()
 
 API_URL = os.getenv("API_URL")
 
-mp_face_detection = mp.solutions.face_detection
-mp_drawing = mp.solutions.drawing_utils
 
 persons = []
 
