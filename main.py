@@ -131,14 +131,14 @@ def capture_camera(camera_url):
 
         encodings = face_recognition.face_encodings(img_rgb)
 
-        if encodings:
-            face_encoding = encodings[0]
-            # matches = face_recognition.compare_faces([person["face"] for person in persons], face_encoding, tolerance=0.6)
+
+        for encoding in encodings:
+            # matches = face_recognition.compare_faces([person["face"] for person in persons], encoding, tolerance=0.6)
             # if True in matches:
             #     index = matches.index(True)
             #     name = persons[index]["name"]
             #     print(f"I found {name}")
-            distances = face_recognition.face_distance([person["face"] for person in persons], face_encoding)
+            distances = face_recognition.face_distance([person["face"] for person in persons], encoding)
             min_distance = np.min(distances)
             data = {
                 "personId": 0,
