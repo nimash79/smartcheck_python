@@ -11,6 +11,7 @@ CHUNK_BYTES = 8000  # 0.25 s at 16 kHz, 16-bit mono
 
 encoder = VoiceEncoder()
 persons = []  # [{ "personId": int/str, "voice": np.ndarray (normalized, float32) }, ...]
+keywords = []
 
 def build_ffmpeg_cmd(url: str):
     return [
@@ -52,6 +53,17 @@ def fetch_and_prepare_person_embeddings():
     persons = cleaned
     print(f"✅ voices prepared: {len(persons)}")
 
+def fetch_keywords():
+    global keywords
+    url = f"{API_URL}/settings"
+    try:
+        request = requests.get(url, headers={"Content-Type": "application/json"})
+        data = request.json()["data"]["setting"]["keyWords"]
+        keywords = data.split(",")
+    except Exception as e:
+        print(f"⚠️ Failed to fetch keywords: {e}")
+        keywords = []
+
 def pcm16_bytes_to_float32(raw_bytes: bytes) -> np.ndarray:
     return np.frombuffer(raw_bytes, np.int16).astype(np.float32) / 32768.0
 
@@ -85,6 +97,7 @@ def add_alarm(data):
 
 def main():
     fetch_and_prepare_person_embeddings()
+    fetch_keywords()
 
     recognizer = load_vosk("./models/vosk-model-fa-0.42")
     ffmpeg_cmd = build_ffmpeg_cmd("http://192.168.0.133:8080/audio.wav")
@@ -118,11 +131,16 @@ def main():
                     # Debug/inspect
                     # print(f"Speaker: {speaker} | Text: {text}")
 
-                    if "جنگ" in text:
-                        add_alarm({
+                    # Check keywords
+                    for keyword in keywords:
+                        if keyword in text:
+                            add_alarm({
                             "personId": speaker,
                             "description": f"مکالمه مشکوک: {text}",
-                        })
+                            })
+                            break
+                        
+                        
                 else:
                     # If no text, still reset the buffer (Vosk finalized silence/noise)
                     utter_bytes.clear()
