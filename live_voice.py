@@ -59,7 +59,7 @@ def fetch_keywords():
     try:
         request = requests.get(url, headers={"Content-Type": "application/json"})
         data = request.json()["data"]["setting"]["keyWords"]
-        keywords = data.split(",")
+        keywords = data.split("،")
     except Exception as e:
         print(f"⚠️ Failed to fetch keywords: {e}")
         keywords = []
@@ -129,7 +129,7 @@ def main():
                     utter_bytes.clear()
 
                     # Debug/inspect
-                    # print(f"Speaker: {speaker} | Text: {text}")
+                    print(f"Speaker: {speaker} | Text: {text}")
 
                     # Check keywords
                     for keyword in keywords:
