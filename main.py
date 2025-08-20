@@ -54,7 +54,13 @@ async def listen_for_faces():
                         person = data.get("person", None)
                         if person:
                             persons.append(person)
-                            print(f"✅ Faces updated: {len(persons)}")
+                    elif data["type"] == "update_face":
+                        person = data.get("person", None)
+                        if person:
+                            for p in persons:
+                                if p["personId"] == person["personId"]:
+                                    p["face"] = person["face"]
+                        print(f"✅ Faces updated: {len(persons)}")
         except Exception as e:
             print(f"⚠️ WebSocket error: {e}. Reconnecting in 5s...")
             await asyncio.sleep(5)
@@ -143,7 +149,7 @@ def capture_camera(camera_url):
 
             for encoding in encodings:
                 distances = face_recognition.face_distance(
-                    [person["face"] for person in persons], encoding
+                    [person["face"] for person in persons if person["face"] is not None], encoding
                 )
                 if len(distances) == 0:
                     continue

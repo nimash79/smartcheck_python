@@ -1,37 +1,75 @@
 import cv2
-from flask import Flask, Response, request
-from cvzone.FaceDetectionModule import FaceDetector
+from flask import Flask, Response, request, jsonify
+from flask_cors import CORS
+from resemblyzer import VoiceEncoder, preprocess_wav
+import os, sys, subprocess, json, time
 import asyncio
 import threading
 import websockets
-import json
 import face_recognition
-import time
+import librosa
 import requests
 import numpy as np
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
 API_URL = os.getenv("API_URL")
 WS_URL = os.getenv("WS_URL")
 PORT = os.getenv("PORT")
+VOICES_FOLDER = os.getenv("VOICES_FOLDER")
+os.makedirs(VOICES_FOLDER, exist_ok=True)
+
+recordings  = {}
+
+def load_audio(file_path):
+    wav, _ = librosa.load(file_path, sr=16000)
+    return wav
+
+encoder = VoiceEncoder()
+
+def create_embedding(file_path):
+    wav = load_audio(file_path)
+    v = encoder.embed_utterance(wav)
+    v = np.asarray(v, dtype=np.float32)
+    n = np.linalg.norm(v) + 1e-12
+    v = v / n
+    return v
+
+def record_audio(url, filename):
+    """Start ffmpeg process to record audio stream"""
+    output_path = os.path.join(VOICES_FOLDER, filename)
+
+    cmd = [
+        "ffmpeg", "-y", "-i", url,
+        "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", "-f", "wav", output_path
+    ]
+
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+
+
+    recordings[url] = {"process": process, "file": output_path}
+    process.wait()
 
 
 app = Flask(__name__)
+CORS(app)
 
 def run_async_loop(coro):
     asyncio.run(coro)
 
-def notify_node_server(face_data):
-    async def send_face():
+def notify_node_server(data):
+    async def send_data():
         try:
             async with websockets.connect(WS_URL) as websocket:
-                await websocket.send(json.dumps(face_data))
+                await websocket.send(json.dumps(data))
         except Exception as e:
             print(f"[WebSocket] Error: {e}")
 
-    threading.Thread(target=run_async_loop, args=(send_face(),)).start()
+    threading.Thread(target=run_async_loop, args=(send_data(),)).start()
 
 def get_faces():
     url = f"{API_URL}/persons/faces"
@@ -92,7 +130,7 @@ def generate_stream(camera_url, detection):
 
                     if len(persons) > 1:
                         distances = face_recognition.face_distance(
-                            [person["face"] for person in persons], encodings[0]
+                            [person["face"] for person in persons if person["face"] is not None], encodings[0]
                         )
                         min_distance = np.min(distances)
                         if min_distance <= 0.5:
@@ -119,6 +157,40 @@ def live():
     camera_url = request.args.get("camera_url")
     return Response(generate_stream(camera_url, False),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+    
+@app.route("/start_recording", methods=["GET"])
+def start_recording():
+    url = request.args.get("url")
+    filename = f"rec_{int(time.time())}.wav"
+
+    if not url:
+        return jsonify({"error": "No URL provided"}), 400
+
+    thread = threading.Thread(target=record_audio, args=(url, filename))
+    thread.start()
+
+    return jsonify({"message": "Recording started", "file": filename})
+
+@app.route("/stop_recording", methods=["POST"])
+def stop_recording():
+    url = request.json.get("url")
+
+    process = recordings[url]["process"]
+    process.terminate()
+    file = recordings[url]["file"]
+    del recordings[url]
+    
+    embedding = create_embedding(file)
+    voice_data = {
+        "event": "add_voice",
+        "microphone_url": url,
+        "voice": embedding.tolist()
+    }
+    notify_node_server(voice_data)
+    
+    os.remove(file)
+
+    return jsonify({"message": "Recording stopped", "file": file})
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=PORT)
